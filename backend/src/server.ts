@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import { runAgent } from "./agent.js";
 
 const app = express();
 
@@ -12,15 +13,17 @@ app.get("/", (_req, res) => {
     });
 });
 
-app.post("/api/enquiry", (req, res) => {
-    const { message } = req.body;
+app.post("/api/enquiry", async (req, res) => {
+    try {
+        const { message } = req.body;
+        console.log("Customer enquiry:", message);
 
-    console.log("Customer enquiry:", message);
-
-    res.json({
-        success: true,
-        enquiry: message
-    });
+        const result = await runAgent(message);
+        res.json(result);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Agent failed", details: String(err) });
+    }
 });
 
 app.listen(3000, () => {
