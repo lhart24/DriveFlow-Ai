@@ -6,16 +6,30 @@ const client = new OpenAI({
   baseURL: 'https://api.tokenfactory.nebius.com/v1/',
 });
 
-const FAST_MODEL = 'nvidia/nemotron-3-nano-30b-a3b';
-const REASONING_MODEL = 'nvidia/nemotron-3-super-120b-a12b'; // or ultra, if available on your key
+const FAST_MODEL = 'nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B'; // keep whatever you already set
+const REASONING_MODEL = 'nvidia/nemotron-3-super-120b-a12b'; // keep whatever you already set
 
-const SYSTEM_PROMPT = `You are a dealership assistant agent. You have these tools:
+function stripThinkTags(text: string): string {
+  return text.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+}
 
+export async function runAgent(customerMessage: string) {
+  const trace: any[] = [];
+  const today = new Date().toISOString().split('T')[0];
+
+  const SYSTEM_PROMPT = `Today's date is ${today}, which is a ${new Date().toLocaleDateString('en-US', { weekday: 'long' })}. When a customer mentions a relative day (e.g. "this Saturday", "next Tuesday"), calculate the actual upcoming date for that day of the week based on today's date — do not use today's date unless the customer explicitly said "today". You are a dealership assistant agent...
 - search_inventory(make?, model?, maxPrice?) - search available vehicles
 - check_availability(vehicleId, appointmentTime) - check test-drive slot
 - create_appointment(customerId, vehicleId, appointmentTime) - book a test drive
-- find_or_create_customer(name, email, phone?) - look up/create customer
+- find_or_create_customer(name, email, phone?) - look up/create customer, returns a customer record with a numeric id
 - create_lead(customerId, vehicleId?, enquiry) - log the enquiry
+
+IMPORTANT: customerId and vehicleId must always be actual numeric IDs returned from a previous tool call — never invent or guess an ID. Always call find_or_create_customer first if you don't yet have a real customer ID for this conversation, before calling create_appointment or create_lead.
+
+
+IMPORTANT: When searching inventory, always pass every filter criteria the customer mentioned (make, model, maxPrice) — don't omit a filter just because it happens to narrow results to one option anyway.
+
+When writing the final response, be precise about what the customer actually said versus what you found for them — don't imply they specified a model, vehicle, or preference they didn't mention. If a search returned only one matching vehicle, present it as "I found one option that matches" rather than assuming it's something they already wanted.
 
 Respond ONLY with JSON in one of these two forms:
 {"action": "call_tool", "tool": "<tool_name>", "input": {...}}
@@ -23,16 +37,9 @@ Respond ONLY with JSON in one of these two forms:
 
 Always confirm availability before booking. No markdown, no explanation, just the JSON object.`;
 
-function stripThinkTags(text: string): string {
-  // Nemotron reasoning models may wrap reasoning in <think> tags
-  return text.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
-}
-
-export async function runAgent(customerMessage: string) {
-  const trace: any[] = [];
   const history: string[] = [`Customer: ${customerMessage}`];
 
-  for (let step = 0; step < 8; step++) { // safety cap on loop iterations
+  for (let step = 0; step < 8; step++) {
     const response = await client.chat.completions.create({
       model: FAST_MODEL,
       messages: [
@@ -55,7 +62,6 @@ export async function runAgent(customerMessage: string) {
     }
 
     if (parsed.action === 'final_response') {
-      // Optional: re-generate the final response with the stronger model for quality
       const polished = await client.chat.completions.create({
         model: REASONING_MODEL,
         messages: [
