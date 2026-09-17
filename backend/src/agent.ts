@@ -6,18 +6,22 @@ const client = new OpenAI({
   baseURL: 'https://api.tokenfactory.nebius.com/v1/',
 });
 
-const FAST_MODEL = 'nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B'; // keep whatever you already set
-const REASONING_MODEL = 'nvidia/nemotron-3-super-120b-a12b'; // keep whatever you already set
+const FAST_MODEL = 'nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B';
+const REASONING_MODEL = 'nvidia/nemotron-3-super-120b-a12b';
 
 function stripThinkTags(text: string): string {
-  return text.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+  let cleaned = text.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+  // Strip trailing meta-commentary in parentheses/asterisks (defensive cleanup)
+  cleaned = cleaned.replace(/\n*\*\([^)]*\)\*\s*$/g, '').trim();
+  return cleaned;
 }
 
 export async function runAgent(customerMessage: string) {
   const trace: any[] = [];
   const today = new Date().toISOString().split('T')[0];
 
-  const SYSTEM_PROMPT = `Today's date is ${today}, which is a ${new Date().toLocaleDateString('en-US', { weekday: 'long' })}. When a customer mentions a relative day (e.g. "this Saturday", "next Tuesday"), calculate the actual upcoming date for that day of the week based on today's date — do not use today's date unless the customer explicitly said "today". You are a dealership assistant agent...
+  const SYSTEM_PROMPT = `Today's date is ${today}, which is a ${new Date().toLocaleDateString('en-US', { weekday: 'long' })}. When a customer mentions a relative day (e.g. "this Saturday", "next Tuesday"), calculate the actual upcoming date for that day of the week based on today's date — do not use today's date unless the customer explicitly said "today". You are a dealership assistant agent with these tools:
+
 - search_inventory(make?, model?, maxPrice?) - search available vehicles
 - check_availability(vehicleId, appointmentTime) - check test-drive slot
 - create_appointment(customerId, vehicleId, appointmentTime) - book a test drive
@@ -26,6 +30,9 @@ export async function runAgent(customerMessage: string) {
 
 IMPORTANT: customerId and vehicleId must always be actual numeric IDs returned from a previous tool call — never invent or guess an ID. Always call find_or_create_customer first if you don't yet have a real customer ID for this conversation, before calling create_appointment or create_lead.
 
+IMPORTANT: "make" means the manufacturer/brand (e.g. Toyota, Mazda, Ford). "model" means the specific vehicle model (e.g. Camry, RAV4, CX-5). Never put a model name into the make field or vice versa. If the customer only mentions a model name without a brand, use the model field only and leave make empty.
+
+IMPORTANT: You do not have the customer's name or email unless they provide it in their message. Answering general inventory questions (availability, pricing) doesn't require contact info. But before creating a lead, checking test-drive availability, or booking an appointment, you must have the customer's name and email — if you don't have them, do NOT call find_or_create_customer with guessed or placeholder values. Instead, respond with a final_response asking for their name and email so you can proceed.
 
 IMPORTANT: When searching inventory, always pass every filter criteria the customer mentioned (make, model, maxPrice) — don't omit a filter just because it happens to narrow results to one option anyway.
 
@@ -65,13 +72,16 @@ Always confirm availability before booking. No markdown, no explanation, just th
       const polished = await client.chat.completions.create({
         model: REASONING_MODEL,
         messages: [
-          { role: 'system', content: 'Rewrite this dealership response to be warm, professional, and concise.' },
+          { role: 'system', content: 'Rewrite the following dealership response to be warm, professional, and concise. Output ONLY the rewritten customer-facing text — no explanation, no notes about your changes, no meta-commentary, no parenthetical remarks about word count or style choices.' },
           { role: 'user', content: parsed.text },
         ],
       });
-      const finalText = stripThinkTags(
-        polished.choices[0].message.content || (polished.choices[0].message as any).reasoning_content || parsed.text
-      );
+
+      const polishedRaw = polished.choices[0].message.content
+        || (polished.choices[0].message as any).reasoning_content
+        || parsed.text;
+      const finalText = stripThinkTags(polishedRaw);
+
       trace.push({ type: 'final_response', text: finalText });
       return { trace, finalResponse: finalText };
     }
