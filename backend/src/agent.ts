@@ -9,18 +9,23 @@ const client = new OpenAI({
 const FAST_MODEL = 'nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B';
 const REASONING_MODEL = 'nvidia/nemotron-3-super-120b-a12b';
 
+interface ConversationMessage {
+  role: 'customer' | 'agent';
+  text: string;
+}
+
 function stripThinkTags(text: string): string {
   let cleaned = text.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
-  // Strip trailing meta-commentary in parentheses/asterisks (defensive cleanup)
   cleaned = cleaned.replace(/\n*\*\([^)]*\)\*\s*$/g, '').trim();
   return cleaned;
 }
 
-export async function runAgent(customerMessage: string) {
+export async function runAgent(conversationHistory: ConversationMessage[]) {
   const trace: any[] = [];
   const today = new Date().toISOString().split('T')[0];
+  const weekday = new Date().toLocaleDateString('en-US', { weekday: 'long' });
 
-  const SYSTEM_PROMPT = `Today's date is ${today}, which is a ${new Date().toLocaleDateString('en-US', { weekday: 'long' })}. When a customer mentions a relative day (e.g. "this Saturday", "next Tuesday"), calculate the actual upcoming date for that day of the week based on today's date — do not use today's date unless the customer explicitly said "today". You are a dealership assistant agent with these tools:
+  const SYSTEM_PROMPT = `Today's date is ${today}, which is a ${weekday}. When a customer mentions a relative day (e.g. "this Saturday", "next Tuesday"), calculate the actual upcoming date for that day of the week based on today's date — do not use today's date unless the customer explicitly said "today". You are a dealership assistant agent with these tools:
 
 - search_inventory(make?, model?, maxPrice?) - search available vehicles
 - check_availability(vehicleId, appointmentTime) - check test-drive slot
@@ -32,9 +37,11 @@ IMPORTANT: customerId and vehicleId must always be actual numeric IDs returned f
 
 IMPORTANT: "make" means the manufacturer/brand (e.g. Toyota, Mazda, Ford). "model" means the specific vehicle model (e.g. Camry, RAV4, CX-5). Never put a model name into the make field or vice versa. If the customer only mentions a model name without a brand, use the model field only and leave make empty.
 
-IMPORTANT: You do not have the customer's name or email unless they provide it in their message. Answering general inventory questions (availability, pricing) doesn't require contact info. But before creating a lead, checking test-drive availability, or booking an appointment, you must have the customer's name and email — if you don't have them, do NOT call find_or_create_customer with guessed or placeholder values. Instead, respond with a final_response asking for their name and email so you can proceed.
+IMPORTANT: You do not have the customer's name or email unless they provide it in their message or an earlier message in this conversation. Answering general inventory questions (availability, pricing) doesn't require contact info. But before creating a lead, checking test-drive availability, or booking an appointment, you must have the customer's name and email — if you don't have them, do NOT call find_or_create_customer with guessed or placeholder values. Instead, respond with a final_response asking for their name and email so you can proceed.
 
 IMPORTANT: When searching inventory, always pass every filter criteria the customer mentioned (make, model, maxPrice) — don't omit a filter just because it happens to narrow results to one option anyway.
+
+IMPORTANT: You have access to the full conversation history below, including earlier customer messages and your own prior responses. Use it to answer follow-up questions like "what car did I just ask about?" or to remember details (name, email, vehicle interest) the customer already gave earlier in this conversation — do not ask for information they already provided.
 
 When writing the final response, be precise about what the customer actually said versus what you found for them — don't imply they specified a model, vehicle, or preference they didn't mention. If a search returned only one matching vehicle, present it as "I found one option that matches" rather than assuming it's something they already wanted.
 
@@ -44,7 +51,10 @@ Respond ONLY with JSON in one of these two forms:
 
 Always confirm availability before booking. No markdown, no explanation, just the JSON object.`;
 
-  const history: string[] = [`Customer: ${customerMessage}`];
+  // Seed working history from the full conversation so far (customer + agent turns)
+  const history: string[] = conversationHistory.map(
+    (turn) => `${turn.role === 'customer' ? 'Customer' : 'Agent'}: ${turn.text}`
+  );
 
   for (let step = 0; step < 8; step++) {
     const response = await client.chat.completions.create({

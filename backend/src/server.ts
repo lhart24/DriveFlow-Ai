@@ -9,14 +9,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Rate limiter for the agent endpoint — each request triggers 2+ LLM calls
-// (Nano for tool orchestration, Super/Ultra for the final response polish),
-// so this protects your Nebius credits from being drained by rapid or
-// automated requests, while still comfortably allowing a judge to try
-// several different enquiries during review.
 const enquiryLimiter = rateLimit({
-  windowMs: 10 * 60 * 1000, // 10 minute window
-  max: 15, // 15 requests per IP per window — generous for manual testing
+  windowMs: 10 * 60 * 1000,
+  max: 15,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -33,10 +28,15 @@ app.get("/", (_req, res) => {
 
 app.post("/api/enquiry", enquiryLimiter, async (req, res) => {
     try {
-        const { message } = req.body;
+        const { message, history } = req.body;
         console.log("Customer enquiry:", message);
 
-        const result = await runAgent(message);
+        const conversationHistory = [
+          ...(history || []),
+          { role: 'customer', text: message },
+        ];
+
+        const result = await runAgent(conversationHistory);
         res.json(result);
     } catch (err) {
         console.error(err);
