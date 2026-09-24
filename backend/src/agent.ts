@@ -15,9 +15,9 @@ interface ConversationMessage {
 }
 
 function stripThinkTags(text: string): string {
-  let cleaned = text.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
-  cleaned = cleaned.replace(/\n*\*\([^)]*\)\*\s*$/g, '').trim();
-  return cleaned;
+  return text
+    .replace(/<think>[\s\S]*?<\/think>/gi, "")
+    .trim();
 }
 
 export async function runAgent(conversationHistory: ConversationMessage[]) {
