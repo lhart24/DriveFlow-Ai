@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import type { FormEvent } from "react";
+import "./App.css";
 const API_URL = `${import.meta.env.VITE_API_URL}/api/enquiry`;
 
 type ToolName =
