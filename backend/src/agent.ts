@@ -29,7 +29,7 @@ function stripThinkTags(text: string): string {
 
 function stripCodeFences(text: string): string {
   const fenceMatch = text.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
-  if (fenceMatch) return fenceMatch[1].trim();
+  if (fenceMatch) return fenceMatch[1]!.trim();
   return text.replace(/^```(?:json)?\s*/i, '').replace(/```$/i, '').trim();
 }
 
