@@ -47,7 +47,7 @@ function buildDateLookupTable(referenceDate: Date, daysAhead: number): string {
   for (let i = 0; i <= daysAhead; i++) {
     const d = new Date(referenceDate);
     d.setDate(d.getDate() + i);
-    const iso = d.toISOString().split('T')[0];
+    const iso = d.toISOString().split('T')[0]!;
     const weekday = d.toLocaleDateString('en-US', { weekday: 'long' });
     const label = i === 0 ? `today (${weekday})` : i === 1 ? `tomorrow (${weekday})` : weekday;
     rows.push(`${label} = ${iso}`);
@@ -58,7 +58,7 @@ function buildDateLookupTable(referenceDate: Date, daysAhead: number): string {
 export async function runAgent(conversationHistory: ConversationMessage[]) {
   const trace: TraceStep[] = [];
   const referenceDate = new Date();
-  const today = referenceDate.toISOString().split('T')[0];
+  const today = referenceDate.toISOString().split('T')[0]!;
   const weekday = referenceDate.toLocaleDateString('en-US', { weekday: 'long' });
   const dateLookupTable = buildDateLookupTable(referenceDate, DATE_LOOKUP_DAYS);
 
@@ -116,8 +116,8 @@ Always confirm availability before booking. No markdown, no explanation, just th
         ],
       });
       raw =
-        response.choices[0].message.content ||
-        (response.choices[0].message as any).reasoning_content ||
+        response.choices[0]!.message.content ||
+        (response.choices[0]!.message as any).reasoning_content ||
         '';
     } catch (err) {
       trace.push({
@@ -152,8 +152,8 @@ Always confirm availability before booking. No markdown, no explanation, just th
           ],
         });
         const polishedRaw =
-          polished.choices[0].message.content ||
-          (polished.choices[0].message as any).reasoning_content ||
+          polished.choices[0]!.message.content ||
+          (polished.choices[0]!.message as any).reasoning_content ||
           parsed.text;
         finalText = cleanModelOutput(polishedRaw);
       } catch (err) {
