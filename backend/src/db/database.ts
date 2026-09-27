@@ -23,7 +23,7 @@ export async function searchInventory(filters: {
     values.push(filters.model);
     conditions.push(`model ILIKE $${values.length}`);
   }
-  if (filters.maxPrice) {
+  if (filters.maxPrice !== undefined) {
     values.push(filters.maxPrice);
     conditions.push(`price <= $${values.length}`);
   }

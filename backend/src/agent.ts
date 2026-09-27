@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import { executeTool } from './tools/toolExecutor.js';
-import { validateToolInput, ToolName } from './tools.js';
+import { validateToolInput, type ToolName } from './tools/tools.js';
 
 const client = new OpenAI({
   apiKey: process.env.NEBIUS_API_KEY,
