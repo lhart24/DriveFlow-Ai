@@ -41,6 +41,13 @@ type TraceStepData =
 interface AgentResponse {
   trace: TraceStepData[];
   finalResponse: string;
+  pendingConfirmation?: PendingConfirmation;
+}
+
+interface PendingConfirmation {
+  token: string;
+  type: "appointment" | "lead";
+  summary: string;
 }
 
 interface ConversationTurn {
@@ -136,6 +143,8 @@ export default function App() {
   const [trace, setTrace] = useState<TraceStepData[]>([]);
   const [status, setStatus] = useState<Status>("idle");
   const [errorText, setErrorText] = useState("");
+  const [pendingConfirmation, setPendingConfirmation] =
+    useState<PendingConfirmation | null>(null);
   const traceEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -147,11 +156,17 @@ export default function App() {
     const text = message.trim();
     if (!text || status === "running") return;
 
-    const historyForRequest = conversation; // snapshot before appending
+    let historyForRequest = conversation.slice(-20);
+    while (
+      historyForRequest.reduce((total, turn) => total + turn.text.length, 0) > 9000
+    ) {
+      historyForRequest = historyForRequest.slice(1);
+    }
 
     setConversation((c) => [...c, { role: "customer", text }]);
     setMessage("");
     setTrace([]);
+    setPendingConfirmation(null);
     setStatus("running");
     setErrorText("");
 
@@ -179,9 +194,42 @@ export default function App() {
 
       const data: AgentResponse = await res.json();
       setTrace(data.trace || []);
+      setPendingConfirmation(data.pendingConfirmation || null);
       setConversation((c) => [
         ...c,
         { role: "agent", text: data.finalResponse || "(no response)" },
+      ]);
+      setStatus("idle");
+    } catch (err) {
+      setErrorText(err instanceof Error ? err.message : "Something went wrong.");
+      setStatus("error");
+    }
+  }
+
+  async function decideConfirmation(approved: boolean) {
+    if (!pendingConfirmation || status === "running") return;
+
+    setStatus("running");
+    setErrorText("");
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/enquiry/confirm`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: pendingConfirmation.token, approved }),
+      });
+      const data = await res.json().catch(() => ({} as { error?: string; message?: string }));
+
+      if (!res.ok) {
+        if (res.status === 409 || res.status === 410) {
+          setPendingConfirmation(null);
+        }
+        throw new Error(data.error || `Request failed (${res.status})`);
+      }
+
+      setPendingConfirmation(null);
+      setConversation((c) => [
+        ...c,
+        { role: "agent", text: data.message || "No changes were made." },
       ]);
       setStatus("idle");
     } catch (err) {
@@ -223,6 +271,37 @@ export default function App() {
                 <div className="bubble__text">{turn.text}</div>
               </div>
             ))}
+            {pendingConfirmation && (
+              <div className="bubble bubble--confirmation">
+                <div className="bubble__role">Review before proceeding</div>
+                <div className="bubble__text">{pendingConfirmation.summary}</div>
+                <div className="confirmation__actions">
+                  <button
+                    className="confirmation__button confirmation__button--approve"
+                    type="button"
+                    onClick={() => void decideConfirmation(true)}
+                    disabled={status === "running"}
+                  >
+                    {status === "running"
+                      ? "Processing…"
+                      : pendingConfirmation.type === "appointment"
+                      ? "Confirm booking"
+                      : "Confirm and save"}
+                  </button>
+                  <button
+                    className="confirmation__button"
+                    type="button"
+                    onClick={() => void decideConfirmation(false)}
+                    disabled={status === "running"}
+                  >
+                    Cancel
+                  </button>
+                </div>
+                <div className="confirmation__expiry">
+                  Confirmation expires in 5 minutes. Nothing is saved until you confirm.
+                </div>
+              </div>
+            )}
             {status === "error" && (
               <div className="bubble bubble--system">
                 <div className="bubble__role">System</div>
@@ -237,13 +316,14 @@ export default function App() {
               placeholder="e.g. Hi, I'm Sarah Chen (sarah.chen@example.com) — looking for a Camry under $40k, can I test drive this Saturday?"
               value={message}
               onChange={(e) => setMessage(e.target.value)}
+              maxLength={2000}
               rows={3}
-              disabled={status === "running"}
+              disabled={status === "running" || pendingConfirmation !== null}
             />
             <button
               className="composer__submit"
               type="submit"
-              disabled={status === "running" || !message.trim()}
+              disabled={status === "running" || pendingConfirmation !== null || !message.trim()}
             >
               {status === "running" ? "Sending…" : "Send enquiry"}
             </button>

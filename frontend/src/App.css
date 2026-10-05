@@ -155,6 +155,48 @@ body {
   color: var(--ember);
 }
 
+.bubble--confirmation {
+  align-self: flex-start;
+  width: min(100%, 620px);
+  border: 1px solid var(--brass);
+  background: var(--panel);
+}
+
+.confirmation__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.confirmation__button {
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 8px 12px;
+  background: var(--panel-raised);
+  color: var(--bone);
+  font: inherit;
+  cursor: pointer;
+}
+
+.confirmation__button--approve {
+  border-color: var(--brass);
+  background: var(--brass);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.confirmation__button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.confirmation__expiry {
+  color: var(--fog);
+  font-size: 0.76rem;
+  margin-top: 10px;
+}
+
 .bubble__role {
   font-family: "IBM Plex Mono", monospace;
   font-size: 0.68rem;
