@@ -5,6 +5,7 @@ import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import { runAgent, type ConversationMessage, type ProposedAction } from './agent.js';
 import { executeConfirmedAction, getVehicleSummary } from './db/database.js';
+import { containsBase64EncodedText } from './messageGuardrails.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -88,6 +89,10 @@ app.post('/api/enquiry', enquiryLimiter, async (req, res) => {
     res.status(400).json({ error: 'Message must be between 1 and 2000 characters.' });
     return;
   }
+  if (containsBase64EncodedText(message)) {
+    res.status(400).json({ error: 'Base64-encoded text is not allowed in messages or conversation history.' });
+    return;
+  }
 
   const rawHistory = body.history === undefined ? [] : body.history;
   if (!Array.isArray(rawHistory) || rawHistory.length > 20) {
@@ -106,6 +111,10 @@ app.post('/api/enquiry', enquiryLimiter, async (req, res) => {
       turn.text.length > 2000
     ) {
       res.status(400).json({ error: 'Conversation history contains an invalid message.' });
+      return;
+    }
+    if (containsBase64EncodedText(turn.text)) {
+      res.status(400).json({ error: 'Base64-encoded text is not allowed in messages or conversation history.' });
       return;
     }
     historyCharacters += turn.text.length;
