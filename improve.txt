@@ -1,3 +1,0 @@
-
-need to improve defence against sql injections
-deployfrontend
