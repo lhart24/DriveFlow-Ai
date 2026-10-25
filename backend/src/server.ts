@@ -20,6 +20,7 @@ interface PendingConfirmation {
 
 const pendingConfirmations = new Map<string, PendingConfirmation>();
 
+app.set('trust proxy', 1);
 app.use(cors());
 app.use(express.json({ limit: '16kb' }));
 
