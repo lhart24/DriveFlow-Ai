@@ -32,6 +32,31 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+function getErrorDiagnostics(error: unknown): string[] {
+  const diagnostics: string[] = [];
+  const visited = new Set<object>();
+
+  function visit(value: unknown) {
+    if (value === null || typeof value !== 'object' || visited.has(value)) return;
+    visited.add(value);
+
+    const detail = [
+      value instanceof Error ? value.name : undefined,
+      'code' in value && typeof value.code === 'string' ? value.code : undefined,
+      'syscall' in value && typeof value.syscall === 'string' ? value.syscall : undefined,
+    ].filter(Boolean).join(' ');
+    if (detail) diagnostics.push(detail);
+
+    if ('errors' in value && Array.isArray(value.errors)) {
+      value.errors.forEach(visit);
+    }
+    if ('cause' in value) visit(value.cause);
+  }
+
+  visit(error);
+  return diagnostics.length > 0 ? diagnostics : ['UnknownError'];
+}
+
 function stripThinkTags(text: string): string {
   return text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
 }
@@ -226,17 +251,16 @@ No markdown, explanation, or private reasoning.`;
     try {
       result = await executeTool(tool.name, input);
     } catch (err) {
-      console.error(
-        `Tool ${tool.name} failed`,
-        err instanceof Error ? err.name : 'UnknownError',
-      );
+      console.error(`Tool ${tool.name} failed`, getErrorDiagnostics(err));
       trace.push({
         type: 'tool_result',
         name: tool.name,
         result: { error: 'The tool could not complete safely.' },
       });
-      history.push(`Tool ${tool.name} failed.`);
-      continue;
+      return {
+        trace,
+        finalResponse: 'I’m having trouble accessing that information right now. Please try again shortly.',
+      };
     }
 
     trace.push({ type: 'tool_result', name: tool.name, result });
