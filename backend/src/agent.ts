@@ -228,8 +228,14 @@ No markdown, explanation, or private reasoning.`;
     const input = parsed.input;
     const validation = validateToolInput(parsed.tool, input);
     if (!tool || !validation.valid) {
-      trace.push({ type: 'tool_result', name: parsed.tool, result: { error: 'Invalid tool request.' } });
-      history.push('The tool request was rejected because its name or input was invalid.');
+      trace.push({
+        type: 'tool_result',
+        name: parsed.tool,
+        result: { error: 'Invalid tool request.', details: validation.errors },
+      });
+      history.push(
+        `The tool request was rejected: ${validation.errors.join('; ')}. Correct the request and try again.`,
+      );
       continue;
     }
 
